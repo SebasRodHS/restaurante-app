@@ -1,49 +1,57 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import LogoutButton from './logout-button'
 
-type Producto = { id: string; nombre: string; precio: number; tipo: string }
+export default async function Home() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+  const { data: perfil } = await supabase.from('perfiles').select('nombre, rol').eq('id', user.id).single()
+  const rol = perfil?.rol ?? ''
 
-export default function Home() {
-  const [productos, setProductos] = useState<Producto[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [cargando, setCargando] = useState(true)
-
-  useEffect(() => {
-    supabase
-      .from('productos')
-      .select('id, nombre, precio, tipo')
-      .order('nombre')
-      .then(({ data, error }) => {
-        if (error) setError(error.message)
-        else setProductos(data ?? [])
-        setCargando(false)
-      })
-  }, [])
+  let avisos = 0
+  if (rol === 'mozo' || rol === 'admin') {
+    const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true }).eq('leida', false)
+    avisos = count ?? 0
+  }
 
   return (
     <main className="min-h-screen bg-neutral-50 p-8">
-      <h1 className="text-2xl font-bold text-neutral-800 mb-6">Carta</h1>
-
-      {cargando && <p className="text-neutral-500">Cargando…</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
-
-      <ul className="max-w-md space-y-2">
-        {productos.map((p) => (
-          <li
-            key={p.id}
-            className="flex items-center justify-between rounded-lg bg-white px-4 py-3 shadow-sm"
-          >
-            <span>
-              <span className="font-medium text-neutral-800">{p.nombre}</span>
-              <span className="ml-2 text-xs uppercase text-neutral-400">{p.tipo}</span>
-            </span>
-            <span className="font-semibold text-neutral-700">
-              S/ {Number(p.precio).toFixed(2)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div className="mx-auto max-w-md">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-neutral-900">Panel</h1>
+          <LogoutButton />
+        </div>
+        <div className="rounded-lg bg-white p-4 shadow-sm">
+          <p className="text-neutral-700">Hola, <span className="font-medium">{perfil?.nombre || user.email}</span></p>
+          <p className="mt-1 text-sm text-neutral-500">Rol: <span className="font-semibold uppercase">{rol || '—'}</span></p>
+        </div>
+        <div className="mt-4 grid gap-3">
+          {(rol === 'mozo' || rol === 'cajero' || rol === 'admin') && (
+            <Link href="/pedidos" className="rounded-lg bg-emerald-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-emerald-800">Tomar pedido</Link>
+          )}
+          {(rol === 'mozo' || rol === 'admin') && (
+            <Link href="/avisos" className="rounded-lg bg-emerald-600 px-4 py-3 text-center text-sm font-medium text-white hover:bg-emerald-700">
+              Avisos{avisos > 0 ? ` (${avisos})` : ''}
+            </Link>
+          )}
+          {(rol === 'cocina' || rol === 'admin') && (
+            <Link href="/cocina" className="rounded-lg bg-orange-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-orange-800">Cocina</Link>
+          )}
+          {(rol === 'cajero' || rol === 'admin') && (
+            <Link href="/caja" className="rounded-lg bg-green-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-green-800">Caja</Link>
+          )}
+          {rol === 'admin' && (
+            <>
+              <Link href="/salon" className="rounded-lg bg-neutral-800 px-4 py-3 text-center text-sm font-medium text-white hover:bg-neutral-700">Ver salón</Link>
+              <Link href="/usuarios" className="rounded-lg bg-neutral-900 px-4 py-3 text-center text-sm font-medium text-white hover:bg-neutral-800">Gestionar usuarios</Link>
+              <Link href="/carta" className="rounded-lg bg-amber-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-amber-800">Gestionar carta y stock</Link>
+              <Link href="/reportes" className="rounded-lg bg-indigo-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-indigo-800">Reportes</Link>
+            </>
+          )}
+        </div>
+      </div>
     </main>
   )
 }
