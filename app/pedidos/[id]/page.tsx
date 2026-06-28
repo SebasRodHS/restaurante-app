@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import Constructor from './constructor'
 
+export const dynamic = 'force-dynamic'
+
 export default async function NuevoPedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -28,8 +30,9 @@ export default async function NuevoPedidoPage({ params }: { params: Promise<{ id
     yaPedido = its ?? []
   }
 
+  const { data: categorias } = await supabase.from('categorias').select('id, nombre').order('nombre')
   const { data: productos } = await supabase
-    .from('productos').select('id, nombre, tipo, precio, descripcion, controla_stock, imagen_url').eq('disponible', true).order('nombre')
+    .from('productos').select('id, nombre, tipo, precio, descripcion, categoria_id, controla_stock, imagen_url').eq('disponible', true).order('nombre')
 
   const hoy = new Date().toISOString().slice(0, 10)
   const ids = (productos ?? []).map((p) => p.id)
@@ -39,7 +42,7 @@ export default async function NuevoPedidoPage({ params }: { params: Promise<{ id
     stock = new Map((s ?? []).map((r) => [r.producto_id, r.cantidad_actual]))
   }
   const prods = (productos ?? []).map((p) => ({
-    id: p.id, nombre: p.nombre, tipo: p.tipo, precio: p.precio, descripcion: p.descripcion,
+    id: p.id, nombre: p.nombre, tipo: p.tipo, precio: p.precio, descripcion: p.descripcion, categoria_id: p.categoria_id,
     imagen_url: p.imagen_url, controla_stock: p.controla_stock, stock: p.controla_stock ? (stock.get(p.id) ?? 0) : null,
   }))
 
@@ -54,7 +57,7 @@ export default async function NuevoPedidoPage({ params }: { params: Promise<{ id
           mesaId={mesa.id} mesaNumero={mesa.numero} areaNombre={areaNombre}
           estado={mesa.estado} ocupadaDesde={mesa.ocupada_desde}
           yaPedido={yaPedido} totalPrevio={Number(ordenAbierta?.total ?? 0)}
-          ordenAbiertaId={ordenAbierta?.id ?? null} productos={prods}
+          ordenAbiertaId={ordenAbierta?.id ?? null} productos={prods} categorias={categorias ?? []}
         />
       </div>
     </main>

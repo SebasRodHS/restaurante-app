@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import CobrarBoton from './cobrar-boton'
 import AnularBoton from './anular-boton'
+import CerrarBoton from './cerrar-boton'
+import { abrirCaja } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +15,33 @@ export default async function CajaPage() {
   const { data: yo } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
   if (!['cajero', 'admin'].includes(yo?.rol ?? '')) redirect('/')
 
+  const { data: sesion } = await supabase.from('sesiones_caja').select('id, monto_inicial, abierta_en').eq('estado', 'abierta').order('abierta_en', { ascending: false }).limit(1).maybeSingle()
+
+  if (!sesion) {
+    return (
+      <main className="min-h-screen bg-neutral-50 p-8">
+        <div className="mx-auto max-w-md">
+          <div className="mb-6 flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-neutral-900">Caja</h1>
+            <Link href="/" className="text-sm text-neutral-600 hover:underline">← Volver al panel</Link>
+          </div>
+          <form action={abrirCaja} className="rounded-xl bg-white p-5 shadow-sm">
+            <h2 className="mb-2 text-lg font-bold text-neutral-900">Abrir caja</h2>
+            <p className="mb-3 text-sm text-neutral-600">Ingresa el fondo inicial: el efectivo con el que empiezas para dar vueltos.</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-neutral-600">Fondo S/</span>
+              <input name="monto_inicial" type="number" min="0" step="0.10" defaultValue="0" className="w-32 rounded-lg border border-neutral-300 px-3 py-2 text-neutral-900" />
+            </div>
+            <button className="mt-3 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">Abrir caja</button>
+          </form>
+        </div>
+      </main>
+    )
+  }
+
   const { data: ordenes } = await supabase.from('ordenes').select('id, total, mesa_id, created_at, notas').eq('estado', 'por_pagar').order('created_at')
   const ids = (ordenes ?? []).map((o) => o.id)
   const mesaIds = Array.from(new Set((ordenes ?? []).map((o) => o.mesa_id).filter(Boolean))) as string[]
-
   const itemsPorOrden = new Map<string, { nombre_producto: string; cantidad: number; precio_unitario: number }[]>()
   if (ids.length) {
     const { data: items } = await supabase.from('orden_items').select('orden_id, nombre_producto, cantidad, precio_unitario').in('orden_id', ids)
@@ -25,12 +50,15 @@ export default async function CajaPage() {
   let mesaNum = new Map<string, string>(); let mesaZona = new Map<string, string | null>(); let zonaNom = new Map<string, string>()
   if (mesaIds.length) {
     const { data: mesas } = await supabase.from('mesas').select('id, numero, zona_id').in('id', mesaIds)
-    mesaNum = new Map((mesas ?? []).map((m) => [m.id, m.numero]))
-    mesaZona = new Map((mesas ?? []).map((m) => [m.id, m.zona_id]))
+    mesaNum = new Map((mesas ?? []).map((m) => [m.id, m.numero])); mesaZona = new Map((mesas ?? []).map((m) => [m.id, m.zona_id]))
     const zIds = Array.from(new Set((mesas ?? []).map((m) => m.zona_id).filter(Boolean))) as string[]
     if (zIds.length) { const { data: zs } = await supabase.from('zonas').select('id, nombre').in('id', zIds); zonaNom = new Map((zs ?? []).map((z) => [z.id, z.nombre])) }
   }
   const totalPendiente = (ordenes ?? []).reduce((s, o) => s + Number(o.total), 0)
+
+  const { data: ventasSes } = await supabase.from('comprobantes').select('total, metodo').eq('sesion_id', sesion.id)
+  const efectivoSes = (ventasSes ?? []).filter((v) => v.metodo === 'efectivo').reduce((s, v) => s + Number(v.total), 0)
+  const esperado = Number(sesion.monto_inicial) + efectivoSes
 
   const hoy = new Date().toISOString().slice(0, 10)
   const { data: ventas } = await supabase.from('comprobantes').select('id, serie, correlativo, total, created_at').gte('created_at', hoy).order('created_at', { ascending: false })
@@ -44,14 +72,18 @@ export default async function CajaPage() {
           <Link href="/" className="text-sm text-neutral-600 hover:underline">← Volver al panel</Link>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <p className="text-sm text-neutral-500">Por cobrar</p>
-            <p className="text-xl font-bold text-neutral-900">{(ordenes ?? []).length} · S/ {totalPendiente.toFixed(2)}</p>
+        <div className="mb-6 rounded-xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm text-neutral-500">Caja abierta desde {new Date(sesion.abierta_en).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
+              <p className="text-sm text-neutral-600">Fondo inicial: <span className="font-semibold">S/ {Number(sesion.monto_inicial).toFixed(2)}</span> · Cobrado efectivo: <span className="font-semibold">S/ {efectivoSes.toFixed(2)}</span></p>
+              <p className="text-base font-bold text-neutral-900">Debe haber en caja: S/ {esperado.toFixed(2)}</p>
+            </div>
+            <CerrarBoton esperado={esperado} />
           </div>
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <p className="text-sm text-neutral-500">Ventas de hoy</p>
-            <p className="text-xl font-bold text-green-700">{(ventas ?? []).length} · S/ {totalHoy.toFixed(2)}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Por cobrar</p><p className="text-lg font-bold text-neutral-900">{(ordenes ?? []).length} · S/ {totalPendiente.toFixed(2)}</p></div>
+            <div className="rounded-lg bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Ventas de hoy</p><p className="text-lg font-bold text-green-700">{(ventas ?? []).length} · S/ {totalHoy.toFixed(2)}</p></div>
           </div>
         </div>
 

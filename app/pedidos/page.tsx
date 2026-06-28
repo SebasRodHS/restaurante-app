@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import PedidosCliente from './pedidos-cliente'
+import AutoRefresh from '../cocina/auto-refresh'
+import AvisoSonido from './../avisos/aviso-sonido'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,11 +25,15 @@ export default async function PedidosPage() {
           <h1 className="text-2xl font-bold text-neutral-900">Tomar pedido</h1>
           <Link href="/" className="text-sm text-neutral-600 hover:underline">← Volver al panel</Link>
         </div>
-        {(avisos ?? 0) > 0 && (
-          <Link href="/avisos" className="mb-4 block rounded-xl bg-emerald-600 px-4 py-3 text-center font-semibold text-white hover:bg-emerald-700">
-            🔔 {avisos} plato(s) listo(s) para servir — ver avisos
-          </Link>
-        )}
+        <AutoRefresh seconds={15} />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <AvisoSonido count={avisos ?? 0} />
+          {(avisos ?? 0) > 0 && (
+            <Link href="/avisos" className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-center font-semibold text-white hover:bg-emerald-700">
+              🔔 {avisos} plato(s) listo(s) para servir — ver avisos
+            </Link>
+          )}
+        </div>
         <PedidosCliente zonas={zonas ?? []} mesas={mesas ?? []} />
       </div>
     </main>

@@ -47,7 +47,7 @@ export default async function Home() {
               <Link href="/salon" className="rounded-lg bg-neutral-800 px-4 py-3 text-center text-sm font-medium text-white hover:bg-neutral-700">Ver salón</Link>
               <Link href="/usuarios" className="rounded-lg bg-neutral-900 px-4 py-3 text-center text-sm font-medium text-white hover:bg-neutral-800">Gestionar usuarios</Link>
               <Link href="/carta" className="rounded-lg bg-amber-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-amber-800">Gestionar carta y stock</Link>
-              <Link href="/reportes" className="rounded-lg bg-indigo-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-indigo-800">Reportes</Link>
+              <Link href="/cierres" className="rounded-lg bg-slate-700 px-4 py-3 text-center text-sm font-medium text-white hover:bg-slate-800">Cierres de caja</Link>
             </>
           )}
         </div>

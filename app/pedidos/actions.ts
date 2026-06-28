@@ -42,7 +42,7 @@ export async function crearPedido(payload: {
     return { ok: false, error: e2.message }
   }
 
-  revalidatePath('/pedidos'); revalidatePath('/salon')
+  revalidatePath('/pedidos'); revalidatePath('/salon'); revalidatePath('/cocina')
   return { ok: true, error: null, ordenId }
 }
 
@@ -55,51 +55,49 @@ export async function liberarMesaPedido(mesaId: string) {
   return { ok: true }
 }
 
-async function staffGuard() {
+export async function anularItem(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, supabase }
-  const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
-  return { ok: !!perfil && ['mozo', 'cajero', 'admin'].includes(perfil.rol), supabase }
-}
-
-export async function anularItem(formData: FormData) {
-  const g = await staffGuard()
-  if (!g.ok) return
+  if (!user) return
+  const { data: yo } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
+  if (!yo || !['mozo', 'cajero', 'admin', 'cocina'].includes(yo.rol)) return
   const itemId = String(formData.get('item_id') || '')
   const motivo = String(formData.get('motivo') || '').trim() || 'Sin motivo'
   if (!itemId) return
 
-  const { data: item } = await g.supabase.from('orden_items').select('id, orden_id, estado').eq('id', itemId).single()
+  const { data: item } = await supabase.from('orden_items').select('id, orden_id, estado').eq('id', itemId).single()
   if (!item || item.estado === 'anulado') return
-  await g.supabase.from('orden_items').update({ estado: 'anulado', motivo_anulacion: motivo }).eq('id', itemId)
+  await supabase.from('orden_items').update({ estado: 'anulado', motivo_anulacion: motivo }).eq('id', itemId)
 
-  const { data: vivos } = await g.supabase.from('orden_items').select('cantidad, precio_unitario, estado').eq('orden_id', item.orden_id)
+  const { data: vivos } = await supabase.from('orden_items').select('cantidad, precio_unitario, estado').eq('orden_id', item.orden_id)
   const activos = (vivos ?? []).filter((i) => i.estado !== 'anulado')
   const total = activos.reduce((s, i) => s + Number(i.precio_unitario) * i.cantidad, 0)
 
   if (activos.length === 0) {
-    const { data: orden } = await g.supabase.from('ordenes').select('mesa_id').eq('id', item.orden_id).single()
-    await g.supabase.from('ordenes').update({ estado: 'anulada', total: 0, motivo_anulacion: 'Todos los platos anulados' }).eq('id', item.orden_id)
-    if (orden?.mesa_id) await g.supabase.from('mesas').update({ estado: 'libre', ocupada_desde: null }).eq('id', orden.mesa_id)
+    const { data: orden } = await supabase.from('ordenes').select('mesa_id').eq('id', item.orden_id).single()
+    await supabase.from('ordenes').update({ estado: 'anulada', total: 0, motivo_anulacion: 'Todos los platos anulados' }).eq('id', item.orden_id)
+    if (orden?.mesa_id) await supabase.from('mesas').update({ estado: 'libre', ocupada_desde: null }).eq('id', orden.mesa_id)
   } else {
-    await g.supabase.from('ordenes').update({ total }).eq('id', item.orden_id)
+    await supabase.from('ordenes').update({ total }).eq('id', item.orden_id)
   }
   revalidatePath('/pedidos'); revalidatePath('/caja'); revalidatePath('/cocina')
 }
 
 export async function anularPedido(formData: FormData) {
-  const g = await staffGuard()
-  if (!g.ok) return
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const { data: yo } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
+  if (!yo || !['mozo', 'cajero', 'admin'].includes(yo.rol)) return
   const ordenId = String(formData.get('orden_id') || '')
   const motivo = String(formData.get('motivo') || '').trim() || 'Sin motivo'
   if (!ordenId) return
 
-  const { data: orden } = await g.supabase.from('ordenes').select('id, mesa_id, estado').eq('id', ordenId).single()
+  const { data: orden } = await supabase.from('ordenes').select('id, mesa_id, estado').eq('id', ordenId).single()
   if (!orden || orden.estado === 'cobrada' || orden.estado === 'anulada') return
 
-  await g.supabase.from('orden_items').update({ estado: 'anulado', motivo_anulacion: motivo }).eq('orden_id', ordenId).neq('estado', 'anulado')
-  await g.supabase.from('ordenes').update({ estado: 'anulada', total: 0, motivo_anulacion: motivo }).eq('id', ordenId)
-  if (orden.mesa_id) await g.supabase.from('mesas').update({ estado: 'libre', ocupada_desde: null }).eq('id', orden.mesa_id)
+  await supabase.from('orden_items').update({ estado: 'anulado', motivo_anulacion: motivo }).eq('orden_id', ordenId).neq('estado', 'anulado')
+  await supabase.from('ordenes').update({ estado: 'anulada', total: 0, motivo_anulacion: motivo }).eq('id', ordenId)
+  if (orden.mesa_id) await supabase.from('mesas').update({ estado: 'libre', ocupada_desde: null }).eq('id', orden.mesa_id)
   revalidatePath('/pedidos'); revalidatePath('/caja'); revalidatePath('/cocina')
 }
